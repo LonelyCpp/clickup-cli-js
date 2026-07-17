@@ -26,8 +26,10 @@ export function flattenValue(value: unknown): string {
   if (typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
     const items = value.map((v) => {
-      if (v !== null && typeof v === 'object' && 'username' in v) {
-        return String((v as Record<string, unknown>).username);
+      if (v !== null && typeof v === 'object') {
+        const obj = v as Record<string, unknown>;
+        if (typeof obj.name === 'string') return obj.name;
+        if (typeof obj.username === 'string') return obj.username;
       }
       if (typeof v === 'string') return v;
       return JSON.stringify(v);
@@ -53,6 +55,67 @@ export function truncateText(value: string, maxChars: number): string {
 function truncateForDisplay(value: unknown, maxChars: number): string {
   const flat = flattenValue(value);
   return truncateText(flat, maxChars);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function getFieldValue(item: Record<string, unknown>, field: string): unknown {
+  if (field in item) return item[field];
+  const customFields = item.custom_fields;
+  if (Array.isArray(customFields)) {
+    const isUuid = UUID_RE.test(field);
+    for (const cf of customFields) {
+      if (cf !== null && typeof cf === 'object') {
+        const obj = cf as Record<string, unknown>;
+        if (isUuid && obj.id === field) return extractCustomFieldValue(obj);
+        if (!isUuid && obj.name === field) return extractCustomFieldValue(obj);
+      }
+    }
+  }
+  return undefined;
+}
+
+function extractCustomFieldValue(cf: Record<string, unknown>): unknown {
+  if (cf.value === null || cf.value === undefined) return null;
+  if (cf.type === 'drop_down' || cf.type === 'labels') {
+    const config = cf.type_config as Record<string, unknown> | undefined;
+    const options = config?.options;
+    if (Array.isArray(options)) {
+      const ids = Array.isArray(cf.value) ? cf.value : [cf.value];
+      const names = ids
+        .map((id) => {
+          const opt = options.find(
+            (o: unknown) => o !== null && typeof o === 'object' && (o as Record<string, unknown>).id === id
+          );
+          return opt ? (opt as Record<string, unknown>).name : id;
+        })
+        .filter((n) => n != null);
+      return names.length > 0 ? names.join(', ') : cf.value;
+    }
+  }
+  return cf.value;
+}
+
+function resolveFieldLabels(
+  items: Record<string, unknown>[],
+  fields: string[]
+): string[] {
+  const uuidToName = new Map<string, string>();
+  for (const item of items) {
+    const cfs = item.custom_fields;
+    if (Array.isArray(cfs)) {
+      for (const cf of cfs) {
+        if (cf !== null && typeof cf === 'object') {
+          const obj = cf as Record<string, unknown>;
+          if (typeof obj.id === 'string' && typeof obj.name === 'string' && !uuidToName.has(obj.id)) {
+            uuidToName.set(obj.id, obj.name);
+          }
+        }
+      }
+    }
+    if (uuidToName.size > 0 && fields.every((f) => !UUID_RE.test(f) || uuidToName.has(f))) break;
+  }
+  return fields.map((f) => uuidToName.get(f) ?? f);
 }
 
 export class OutputConfig {
@@ -145,26 +208,27 @@ export class OutputConfig {
   }
 
   private renderTable(items: Record<string, unknown>[], fields: string[]): void {
-    const table = new Table({ head: fields, wordWrap: true });
+    const labels = resolveFieldLabels(items, fields);
+    const table = new Table({ head: labels, wordWrap: true });
     for (const item of items) {
-      table.push(fields.map((f) => truncateForDisplay(item[f], this.maxChars)));
+      table.push(fields.map((f) => truncateForDisplay(getFieldValue(item, f), this.maxChars)));
     }
     console.log(table.toString());
   }
 
   private renderCompact(items: Record<string, unknown>[], fields: string[]): void {
-    if (!this.noHeader) console.log(fields.join('|'));
+    if (!this.noHeader) console.log(resolveFieldLabels(items, fields).join('|'));
     for (const item of items) {
-      const row = fields.map((f) => truncateForDisplay(item[f], this.maxChars));
+      const row = fields.map((f) => truncateForDisplay(getFieldValue(item, f), this.maxChars));
       console.log(row.join('|'));
     }
   }
 
   private renderCsv(items: Record<string, unknown>[], fields: string[]): void {
-    if (!this.noHeader) console.log(fields.join(','));
+    if (!this.noHeader) console.log(resolveFieldLabels(items, fields).join(','));
     for (const item of items) {
       const row = fields.map((f) => {
-        const val = truncateForDisplay(item[f], this.maxChars);
+        const val = truncateForDisplay(getFieldValue(item, f), this.maxChars);
         if (val.includes(',')) return `"${val.replace(/"/g, '""')}"`;
         return val;
       });
@@ -202,7 +266,7 @@ export function compactItems(
   return items.map((item) => {
     const obj: Record<string, unknown> = {};
     for (const field of fields) {
-      const value = item[field];
+      const value = getFieldValue(item, field);
       if (value === null || value === undefined) {
         obj[field] = null;
       } else if (typeof value === 'string') {
@@ -241,7 +305,7 @@ export function fitToTokenBudget(
     if (mode === 'json' || mode === 'json-compact') {
       itemText = JSON.stringify(compactItems([item], fields));
     } else {
-      itemText = fields.map((f) => flattenValue(item[f])).join('|');
+      itemText = fields.map((f) => flattenValue(getFieldValue(item, f))).join('|');
     }
     const itemTokens = estimateTokens(itemText);
     if (usedTokens + itemTokens > maxTokens) break;
