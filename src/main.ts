@@ -1,11 +1,11 @@
 import { Command, Option } from 'commander';
+import { DEFAULT_MAX_CHARS } from './cli.js';
 import { registerCommands } from './commands/index.js';
 import { CliError } from './error.js';
-import { DEFAULT_MAX_CHARS } from './cli.js';
 
 const program = new Command();
 
-const parseIntArg = (v: string) => parseInt(v, 10);
+const parseIntArg = (v: string) => Number.parseInt(v, 10);
 
 program
   .name('clickup-cli-js')
@@ -23,11 +23,13 @@ program
   .option('--start <ms>', 'Boundary timestamp in Unix ms (v2 comment endpoints)', parseIntArg)
   .option('--start-id <id>', 'Boundary comment id (v2 comment endpoints)')
   .option('-q, --quiet', 'Only print IDs, one per line', false)
-  .addOption(new Option('--timeout <secs>', 'HTTP timeout in seconds').default('30').argParser(parseIntArg))
+  .addOption(
+    new Option('--timeout <secs>', 'HTTP timeout in seconds').default('30').argParser(parseIntArg)
+  )
   .addOption(
     new Option('--max-chars <n>', 'Max chars per text value (0=off)')
       .default(String(DEFAULT_MAX_CHARS))
-      .argParser(parseIntArg),
+      .argParser(parseIntArg)
   )
   .addOption(new Option('--max-tokens <n>', 'Soft token budget cap').argParser(parseIntArg));
 
@@ -39,12 +41,28 @@ program.hook('preAction', () => {
   if (typeof opts.output === 'string' && !validModes.includes(opts.output)) {
     throw new CliError(
       'client',
-      `Invalid output mode '${opts.output}'. Valid: ${validModes.join(', ')}`,
+      `Invalid output mode '${opts.output}'. Valid: ${validModes.join(', ')}`
     );
   }
 });
 
+async function checkForUpdates(): Promise<void> {
+  if (process.env.CI || !process.stdout.isTTY) return;
+  try {
+    const updateNotifier = (await import('update-notifier')).default;
+    const pkg = {
+      name: 'clickup-cli-js',
+      version: '0.1.0',
+    };
+    const notifier = updateNotifier({ pkg, updateCheckInterval: 1000 * 60 * 60 * 24 });
+    notifier.notify({ isGlobal: true });
+  } catch {
+    // update-notifier is optional — never fail on it
+  }
+}
+
 async function main() {
+  void checkForUpdates();
   try {
     await program.parseAsync(process.argv);
   } catch (e) {

@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
-import { URL } from 'node:url';
-import { writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { URL } from 'node:url';
 import nock from 'nock';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { ClickUpClient } from '../src/client.js';
 import { CliError } from '../src/error.js';
 
@@ -38,14 +38,16 @@ async function nodeFetch(url: string, options: any = {}): Promise<ShimResponse> 
           const ct = v.type || 'application/octet-stream';
           parts.push(
             Buffer.from(
-              `Content-Disposition: form-data; name="${k}"; filename="${fname}"\r\nContent-Type: ${ct}\r\n\r\n`,
-            ),
+              `Content-Disposition: form-data; name="${k}"; filename="${fname}"\r\nContent-Type: ${ct}\r\n\r\n`
+            )
           );
           const ab = await v.arrayBuffer();
           parts.push(Buffer.from(ab));
           parts.push(Buffer.from('\r\n'));
         } else {
-          parts.push(Buffer.from(`Content-Disposition: form-data; name="${k}"\r\n\r\n${String(v)}\r\n`));
+          parts.push(
+            Buffer.from(`Content-Disposition: form-data; name="${k}"\r\n\r\n${String(v)}\r\n`)
+          );
         }
       }
       parts.push(Buffer.from(`--${boundary}--\r\n`));
@@ -200,7 +202,9 @@ describe('ClickUpClient', () => {
   });
 
   it('uses a custom base URL via withBaseUrl', async () => {
-    nock('http://localhost:9999').get('/api/v2/user').reply(200, { user: { username: 'mock' } });
+    nock('http://localhost:9999')
+      .get('/api/v2/user')
+      .reply(200, { user: { username: 'mock' } });
     const client = new ClickUpClient('test-token', 30).withBaseUrl('http://localhost:9999/api');
     const resp = await client.get('/v2/user');
     expect(resp.user.username).toBe('mock');

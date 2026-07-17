@@ -9,7 +9,7 @@ export function registerStatus(program: Command): void {
     .description('Show current configuration and status')
     .action(() => {
       const ui = createUI({ outputMode: 'table', quiet: false });
-      let config;
+      let config: ReturnType<typeof ConfigManager.load> | undefined;
       let configPath: string;
       try {
         config = ConfigManager.load();

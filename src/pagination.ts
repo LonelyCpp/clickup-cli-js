@@ -18,7 +18,7 @@ export async function walkPage(
   client: ClickUpClient,
   itemsKey: string,
   buildPath: (page: number) => string,
-  opts: { all?: boolean; limit?: number; page?: number },
+  opts: { all?: boolean; limit?: number; page?: number }
 ): Promise<any[]> {
   const startPage = opts.page || 0;
   const collected: any[] = [];
@@ -48,7 +48,7 @@ export async function walkCursor(
   client: ClickUpClient,
   itemsKeys: string[],
   buildPath: (cursor: string | null) => string,
-  opts: { all?: boolean; limit?: number; cursor?: string },
+  opts: { all?: boolean; limit?: number; cursor?: string }
 ): Promise<any[]> {
   let cursor: string | null = opts.cursor || null;
   const collected: any[] = [];
@@ -79,7 +79,7 @@ export async function walkStartId(
   client: ClickUpClient,
   itemsKey: string,
   buildPath: (start: number | null, startId: string | null) => string,
-  opts: { all?: boolean; limit?: number; start?: number; startId?: string },
+  opts: { all?: boolean; limit?: number; start?: number; startId?: string }
 ): Promise<any[]> {
   const PAGE_HINT = 25;
   let currentStart: number | null = opts.start ?? null;
@@ -97,8 +97,7 @@ export async function walkStartId(
       const last = items[count - 1];
       const dateVal = last.date;
       const idVal = last.id;
-      const date =
-        typeof dateVal === 'number' ? dateVal : Number.parseInt(String(dateVal), 10);
+      const date = typeof dateVal === 'number' ? dateVal : Number.parseInt(String(dateVal), 10);
       const id = idVal != null ? String(idVal) : null;
       if (!Number.isNaN(date) && id != null) {
         nextBoundary = { date, id };

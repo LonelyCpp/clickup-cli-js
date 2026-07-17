@@ -78,12 +78,15 @@ export class OutputConfig {
     noHeader: boolean,
     quiet: boolean,
     maxChars: number,
-    maxTokens?: number,
+    maxTokens?: number
   ): OutputConfig {
     return new OutputConfig({
       mode: mode as OutputMode,
       fields: fields
-        ? fields.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+        ? fields
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
         : undefined,
       noHeader,
       quiet,
@@ -112,7 +115,7 @@ export class OutputConfig {
             truncated: true,
             shown: fitted.shown,
             total: fitted.total,
-          }),
+          })
         );
       }
       return;
@@ -194,7 +197,7 @@ export class OutputConfig {
 export function compactItems(
   items: Record<string, unknown>[],
   fields: string[],
-  maxChars = 0,
+  maxChars = 0
 ): Record<string, unknown>[] {
   return items.map((item) => {
     const obj: Record<string, unknown> = {};
@@ -223,11 +226,13 @@ export function fitToTokenBudget(
   items: Record<string, unknown>[],
   fields: string[],
   mode: OutputMode,
-  maxTokens: number,
+  maxTokens: number
 ): { items: Record<string, unknown>[]; truncated: boolean; shown: number; total: number } {
   let usedTokens = 0;
   const headerTokens =
-    mode === 'json' || mode === 'json-compact' ? estimateTokens('[]') : estimateTokens(fields.join('|'));
+    mode === 'json' || mode === 'json-compact'
+      ? estimateTokens('[]')
+      : estimateTokens(fields.join('|'));
   usedTokens += headerTokens;
 
   const fitting: Record<string, unknown>[] = [];

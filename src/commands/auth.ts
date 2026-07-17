@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
-import { createContext, type Context } from '../context.js';
-import { ConfigManager } from '../config.js';
 import type { CliOptions } from '../cli.js';
+import { ConfigManager } from '../config.js';
+import { type Context, createContext } from '../context.js';
 
 function getRoot(cmd: Command): Command {
   let root = cmd;

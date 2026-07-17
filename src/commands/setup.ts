@@ -1,10 +1,10 @@
-import type { Command } from 'commander';
 import { password, select } from '@inquirer/prompts';
+import type { Command } from 'commander';
+import type { CliOptions } from '../cli.js';
 import { ClickUpClient } from '../client.js';
-import { ConfigManager, type Config } from '../config.js';
+import { type Config, ConfigManager } from '../config.js';
 import { CliError } from '../error.js';
 import { createUI } from '../ui.js';
-import type { CliOptions } from '../cli.js';
 
 function getRoot(cmd: Command): Command {
   let root = cmd;

@@ -1,8 +1,8 @@
-import { ClickUpClient } from './client.js';
-import { OutputConfig } from './output.js';
-import { createUI, type UI } from './ui.js';
-import { resolveToken, resolveWorkspace, type Config } from './config.js';
 import type { CliOptions } from './cli.js';
+import { ClickUpClient } from './client.js';
+import { type Config, resolveToken, resolveWorkspace } from './config.js';
+import { OutputConfig } from './output.js';
+import { type UI, createUI } from './ui.js';
 
 export interface Context {
   client: ClickUpClient;
@@ -23,7 +23,7 @@ export function createContext(cli: CliOptions, config: Config): Context {
     cli.noHeader,
     cli.quiet,
     cli.maxChars,
-    cli.maxTokens,
+    cli.maxTokens
   );
   const ui = createUI({ outputMode: cli.output, quiet: cli.quiet });
 

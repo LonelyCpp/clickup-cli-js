@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  flattenValue,
-  truncateText,
   OutputConfig,
   compactItems,
+  countItems,
   estimateTokens,
   fitToTokenBudget,
-  countItems,
+  flattenValue,
+  truncateText,
 } from '../src/output.js';
 
 describe('flattenValue', () => {
@@ -22,7 +22,8 @@ describe('flattenValue', () => {
   it('assignees array', () =>
     expect(flattenValue([{ username: 'Nick' }, { username: 'Bob' }])).toBe('Nick, Bob'));
   it('empty array → "-"', () => expect(flattenValue([])).toBe('-'));
-  it('object with name', () => expect(flattenValue({ name: 'My Space', id: '123' })).toBe('My Space'));
+  it('object with name', () =>
+    expect(flattenValue({ name: 'My Space', id: '123' })).toBe('My Space'));
   it('due_date ms timestamp', () => {
     expect(flattenValue('1773705600000')).toBe('2026-03-17');
   });
@@ -49,9 +50,10 @@ describe('OutputConfig.fromCli', () => {
 describe('truncateText', () => {
   it('under limit → unchanged', () => expect(truncateText('short', 60)).toBe('short'));
   it('over limit → truncated with …', () =>
-    expect(truncateText('a'.repeat(100), 10)).toBe('a'.repeat(10) + '\u2026'));
+    expect(truncateText('a'.repeat(100), 10)).toBe(`${'a'.repeat(10)}\u2026`));
   it('0 → no truncation', () => expect(truncateText('a'.repeat(100), 0)).toBe('a'.repeat(100)));
-  it('exactly at limit → unchanged', () => expect(truncateText('1234567890', 10)).toBe('1234567890'));
+  it('exactly at limit → unchanged', () =>
+    expect(truncateText('1234567890', 10)).toBe('1234567890'));
 });
 
 describe('compactItems — TYPE-PRESERVING (Tier A-1)', () => {
@@ -76,7 +78,7 @@ describe('compactItems — TYPE-PRESERVING (Tier A-1)', () => {
   it('applies maxChars when specified', () => {
     const items = [{ id: 'abc', name: 'a'.repeat(100) }];
     const result = compactItems(items, ['id', 'name'], 10);
-    expect(result[0].name).toBe('a'.repeat(10) + '\u2026');
+    expect(result[0].name).toBe(`${'a'.repeat(10)}\u2026`);
   });
   it('no maxChars by default', () => {
     const items = [{ id: 'abc', name: 'a'.repeat(100) }];

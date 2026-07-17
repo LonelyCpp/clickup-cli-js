@@ -33,7 +33,7 @@ export class CliError extends Error {
   constructor(
     kindOrOpts: CliErrorKind | CliErrorObjectOpts,
     message?: string,
-    opts?: CliErrorOpts,
+    opts?: CliErrorOpts
   ) {
     let kind: CliErrorKind;
     let msg: string;

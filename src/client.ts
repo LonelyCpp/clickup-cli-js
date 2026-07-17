@@ -147,7 +147,7 @@ export class ClickUpClient {
   }
 
   private computeRateLimitWait(resp: any): number {
-    const reset = parseInt(resp.headers.get('X-RateLimit-Reset') || '0');
+    const reset = Number.parseInt(resp.headers.get('X-RateLimit-Reset') || '0');
     const now = Math.floor(Date.now() / 1000);
     return reset > now ? reset - now : 1;
   }
@@ -155,8 +155,8 @@ export class ClickUpClient {
   private readRateHeaders(resp: any): void {
     const remaining = resp.headers.get('X-RateLimit-Remaining');
     const reset = resp.headers.get('X-RateLimit-Reset');
-    if (remaining !== null) this.rateLimitRemaining = parseInt(remaining);
-    if (reset !== null) this.rateLimitReset = parseInt(reset);
+    if (remaining !== null) this.rateLimitRemaining = Number.parseInt(remaining);
+    if (reset !== null) this.rateLimitReset = Number.parseInt(reset);
   }
 
   private async parseSuccess(resp: any): Promise<any> {
