@@ -1,0 +1,1 @@
+use https://developer.clickup.com/llms.txt as your source of truth for clickup API documentation

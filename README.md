@@ -1,6 +1,6 @@
 # clickup-cli-js
 
-A CLI for the [ClickUp API](https://developer.clickup.com/reference), optimized for AI agents. TypeScript port of [clickup-cli](https://github.com/nicholasbester/clickup-cli) with improved token-efficient output.
+A CLI for the [ClickUp API](https://developer.clickup.com/reference), optimized for AI agents.
 
 ## Why?
 
