@@ -303,6 +303,10 @@ Flags like `--description`, `--text`, `--content` accept:
 - `@@text` — literal text starting with `@`
 - anything else — used verbatim
 
+## Attribution
+
+This project is a TypeScript port of [clickup-cli](https://github.com/nicholasbester/clickup-cli) by [Nicholas Bester](https://github.com/nicholasbester), a Rust CLI for the ClickUp API. The command structure, API endpoint mappings, git-branch task-ID detection, pagination strategies, and token-efficient output philosophy are derived from the original project, which is licensed under Apache-2.0.
+
 ## License
 
 Apache-2.0
