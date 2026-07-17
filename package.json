@@ -1,0 +1,65 @@
+{
+  "name": "clickup-cli-js",
+  "version": "0.1.0",
+  "description": "CLI for the ClickUp API, optimized for AI agents (TypeScript port)",
+  "license": "Apache-2.0",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "keywords": [
+    "clickup",
+    "cli",
+    "api",
+    "ai-agents",
+    "mcp",
+    "productivity"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "clickup-cli-js": "bin/clickup-cli-js.js",
+    "clkup-js": "bin/clkup-js.js"
+  },
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check src tests",
+    "format": "biome format --write src tests",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "dependencies": {
+    "@inquirer/prompts": "^7.0.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "boxen": "^8.0.0",
+    "chalk": "^5.0.0",
+    "cli-table3": "^0.6.0",
+    "commander": "^12.0.0",
+    "env-paths": "^3.0.0",
+    "figures": "^6.0.0",
+    "ora": "^8.0.0",
+    "update-notifier": "^7.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/node": "^20.0.0",
+    "@types/update-notifier": "^6.0.0",
+    "nock": "^13.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
