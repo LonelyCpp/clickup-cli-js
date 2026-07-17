@@ -42,14 +42,14 @@ export function registerList(program: Command): void {
       const basePath = opts.folder
         ? `/v2/folder/${opts.folder}/list`
         : `/v2/space/${opts.space}/list`;
-      const items = await walkPage(
+      const { items, hasMore } = await walkPage(
         ctx.client,
         'lists',
         (page) => `${basePath}?archived=${archived}&page=${page}`,
         { all: ctx.cli.all, limit: ctx.cli.limit, page: ctx.cli.page }
       );
       ctx.ui.stopSpinner();
-      ctx.output.printItems(items, ['id', 'name', 'task_count'], 'id');
+      ctx.output.printItems(items, ['id', 'name', 'task_count'], 'id', { hasMore });
     });
 
   listCmd

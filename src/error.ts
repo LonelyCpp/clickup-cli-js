@@ -7,7 +7,9 @@ export type CliErrorKind =
   | 'server'
   | 'config'
   | 'branchDetect'
-  | 'io';
+  | 'io'
+  | 'network'
+  | 'timeout';
 
 export interface CliErrorOpts {
   status?: number;
@@ -79,6 +81,10 @@ export class CliError extends Error {
         return 'ClickUp server error. Try again in a few seconds.';
       case 'config':
         return "Run 'clickup-cli-js setup' to configure your API token";
+      case 'network':
+        return 'Check your internet connection, VPN/proxy settings, or firewall rules — the ClickUp API could not be reached';
+      case 'timeout':
+        return 'The request exceeded the configured --timeout. Try increasing --timeout or check your network connection';
       default:
         return undefined;
     }
@@ -100,6 +106,10 @@ export class CliError extends Error {
         return 4;
       case 'server':
         return 5;
+      case 'network':
+        return 6;
+      case 'timeout':
+        return 7;
     }
   }
 

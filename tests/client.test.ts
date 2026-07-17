@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { URL } from 'node:url';
 import nock from 'nock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ClickUpClient } from '../src/client.js';
+import { ClickUpClient, classifyFetchError } from '../src/client.js';
 import { CliError } from '../src/error.js';
 
 type ShimResponse = {
@@ -89,10 +89,12 @@ async function nodeFetch(url: string, options: any = {}): Promise<ShimResponse> 
     req.on('error', reject);
     if (options.signal) {
       const signal = options.signal;
+      const abortError = () =>
+        new DOMException('The operation was aborted due to timeout', 'TimeoutError');
       if (signal.aborted) {
-        req.destroy(new Error('The operation was aborted'));
+        req.destroy(abortError());
       } else {
-        signal.addEventListener('abort', () => req.destroy(new Error('The operation was aborted')));
+        signal.addEventListener('abort', () => req.destroy(abortError()));
       }
     }
     if (bodyBuf) req.write(bodyBuf);
@@ -229,5 +231,58 @@ describe('ClickUpClient', () => {
       status: 422,
       message: 'HTTP 422: nope-bad',
     });
+  });
+
+  it('a real request that exceeds --timeout is classified as a timeout error', async () => {
+    nock('https://api.clickup.com').get('/api/v2/task/slow').delay(300).reply(200, { ok: true });
+    const client = new ClickUpClient('test-token', 0.05);
+    await expect(client.get('/v2/task/slow')).rejects.toMatchObject({ kind: 'timeout' });
+  });
+});
+
+describe('classifyFetchError', () => {
+  it('classifies a TimeoutError DOMException as timeout', () => {
+    const err = new DOMException('aborted', 'TimeoutError');
+    const e = classifyFetchError(err, 30);
+    expect(e.kind).toBe('timeout');
+    expect(e.message).toContain('30s');
+  });
+
+  it('classifies an AbortError as timeout', () => {
+    const err = new DOMException('aborted', 'AbortError');
+    const e = classifyFetchError(err, 5);
+    expect(e.kind).toBe('timeout');
+  });
+
+  it('classifies a TypeError with a system error cause as network', () => {
+    const err = Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND api.clickup.com' },
+    });
+    const e = classifyFetchError(err, 30);
+    expect(e.kind).toBe('network');
+    expect(e.message).toContain('ENOTFOUND');
+  });
+
+  it('classifies a connection-refused cause as network', () => {
+    const err = Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:1' },
+    });
+    const e = classifyFetchError(err, 30);
+    expect(e.kind).toBe('network');
+    expect(e.message).toContain('ECONNREFUSED');
+  });
+
+  it('classifies a bare TypeError("fetch failed") with no cause as network', () => {
+    const err = new TypeError('fetch failed');
+    const e = classifyFetchError(err, 30);
+    expect(e.kind).toBe('network');
+  });
+
+  it('falls back to a generic client error for anything else', () => {
+    const err = new Error('something unexpected');
+    const e = classifyFetchError(err, 30);
+    expect(e.kind).toBe('client');
+    expect(e.status).toBe(0);
+    expect(e.message).toContain('something unexpected');
   });
 });

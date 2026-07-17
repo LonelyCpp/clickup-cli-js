@@ -2,6 +2,11 @@ import type { ClickUpClient } from './client.js';
 
 const MAX_PAGES = 100;
 
+export interface WalkResult {
+  items: any[];
+  hasMore: boolean;
+}
+
 export function extractArray(resp: any, keys: string[]): any[] | null {
   for (const key of keys) {
     if (Array.isArray(resp?.[key])) {
@@ -19,16 +24,17 @@ export async function walkPage(
   itemsKey: string,
   buildPath: (page: number) => string,
   opts: { all?: boolean; limit?: number; page?: number }
-): Promise<any[]> {
+): Promise<WalkResult> {
   const startPage = opts.page || 0;
   const collected: any[] = [];
   let currentPage = startPage;
   let pagesFetched = 0;
+  let lastPage = false;
 
   while (true) {
     const resp = await client.get(buildPath(currentPage));
     const items = extractArray(resp, [itemsKey, 'data']) || [];
-    const lastPage = resp.last_page ?? items.length === 0;
+    lastPage = resp.last_page ?? items.length === 0;
     collected.push(...items);
     pagesFetched++;
 
@@ -38,10 +44,8 @@ export async function walkPage(
     currentPage++;
   }
 
-  if (opts.limit) {
-    return collected.slice(0, opts.limit);
-  }
-  return collected;
+  const items = opts.limit ? collected.slice(0, opts.limit) : collected;
+  return { items, hasMore: !lastPage };
 }
 
 export async function walkCursor(
@@ -80,12 +84,13 @@ export async function walkStartId(
   itemsKey: string,
   buildPath: (start: number | null, startId: string | null) => string,
   opts: { all?: boolean; limit?: number; start?: number; startId?: string }
-): Promise<any[]> {
+): Promise<WalkResult> {
   const PAGE_HINT = 25;
   let currentStart: number | null = opts.start ?? null;
   let currentStartId: string | null = opts.startId ?? null;
   const collected: any[] = [];
   let pagesFetched = 0;
+  let hasMore = false;
 
   while (true) {
     const resp = await client.get(buildPath(currentStart, currentStartId));
@@ -106,20 +111,29 @@ export async function walkStartId(
 
     collected.push(...items);
     pagesFetched++;
+    const shortPage = count < PAGE_HINT;
 
-    if (!opts.all) break;
-    if (count < PAGE_HINT || pagesFetched >= MAX_PAGES) break;
-    if (opts.limit && collected.length >= opts.limit) break;
+    if (!opts.all) {
+      hasMore = count > 0 && !shortPage;
+      break;
+    }
+    if (shortPage || pagesFetched >= MAX_PAGES) {
+      hasMore = pagesFetched >= MAX_PAGES && !shortPage;
+      break;
+    }
+    if (opts.limit && collected.length >= opts.limit) {
+      hasMore = true;
+      break;
+    }
     if (nextBoundary) {
       currentStart = nextBoundary.date;
       currentStartId = nextBoundary.id;
     } else {
+      hasMore = false;
       break;
     }
   }
 
-  if (opts.limit) {
-    return collected.slice(0, opts.limit);
-  }
-  return collected;
+  const items = opts.limit ? collected.slice(0, opts.limit) : collected;
+  return { items, hasMore };
 }

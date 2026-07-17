@@ -28,14 +28,14 @@ export function registerFolder(program: Command): void {
       const ctx = buildContext(cmd);
       ctx.ui.startSpinner('Fetching folders...');
       const archived = opts.archived ? 'true' : 'false';
-      const items = await walkPage(
+      const { items, hasMore } = await walkPage(
         ctx.client,
         'folders',
         (page) => `/v2/space/${opts.space}/folder?archived=${archived}&page=${page}`,
         { all: ctx.cli.all, limit: ctx.cli.limit, page: ctx.cli.page }
       );
       ctx.ui.stopSpinner();
-      ctx.output.printItems(items, ['id', 'name', 'task_count'], 'id');
+      ctx.output.printItems(items, ['id', 'name', 'task_count'], 'id', { hasMore });
     });
 
   folder

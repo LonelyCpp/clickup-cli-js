@@ -14,6 +14,7 @@ export interface CliOptions {
   timeout: number;
   maxChars: number;
   maxTokens?: number;
+  outputFile?: string;
 }
 
 export const DEFAULT_MAX_CHARS = 60;

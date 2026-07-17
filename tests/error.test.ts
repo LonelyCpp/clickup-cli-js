@@ -29,6 +29,12 @@ describe('CliError exitCode', () => {
   it('server → 5', () => {
     expect(new CliError('server', 'x').exitCode()).toBe(5);
   });
+  it('network → 6', () => {
+    expect(new CliError('network', 'x').exitCode()).toBe(6);
+  });
+  it('timeout → 7', () => {
+    expect(new CliError('timeout', 'x').exitCode()).toBe(7);
+  });
 });
 
 describe('CliError factory methods', () => {
@@ -136,6 +142,14 @@ describe('CliError hints', () => {
 
   it('io has no default hint', () => {
     expect(CliError.io('x').hint).toBeUndefined();
+  });
+
+  it('network has connectivity hint', () => {
+    expect(new CliError('network', 'x').hint).toContain('internet connection');
+  });
+
+  it('timeout has --timeout hint', () => {
+    expect(new CliError('timeout', 'x').hint).toContain('--timeout');
   });
 });
 

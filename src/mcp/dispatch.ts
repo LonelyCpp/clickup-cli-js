@@ -95,10 +95,14 @@ async function paginatedList(
   }
 
   if (all) {
-    const items = await walkPage(client, itemsKey, buildPath, { all: true, limit, page });
+    const { items, hasMore } = await walkPage(client, itemsKey, buildPath, {
+      all: true,
+      limit,
+      page,
+    });
     return {
       items: compactItems(items, fields),
-      pagination: { page, limit: limit ?? null, has_more: false },
+      pagination: { page, limit: limit ?? null, has_more: hasMore },
     };
   }
 
@@ -186,10 +190,15 @@ async function commentList(
     return compactItems(items, COMMENT_FIELDS);
   }
 
-  const items = await walkStartId(client, 'comments', buildPath, { all, limit, start, startId });
+  const { items, hasMore } = await walkStartId(client, 'comments', buildPath, {
+    all,
+    limit,
+    start,
+    startId,
+  });
   return {
     items: compactItems(items, COMMENT_FIELDS),
-    pagination: { limit: limit ?? null, has_more: false },
+    pagination: { limit: limit ?? null, has_more: hasMore },
   };
 }
 
@@ -526,13 +535,18 @@ export async function dispatchTool(
       params.set('include_closed', 'true');
       for (const s of strArrayArg(args, 'statuses') ?? []) params.append('statuses[]', s);
       const base = params.toString();
-      const items = await walkPage(
+      const { items, hasMore } = await walkPage(
         client,
         'tasks',
         (page) => `/v2/list/${listId}/task?${base}&page=${page}`,
         { all: true }
       );
-      return { count: items.length };
+      return hasMore
+        ? {
+            count: items.length,
+            note: 'Page-fetch safety limit reached; count may be a lower bound.',
+          }
+        : { count: items.length };
     }
 
     case 'clickup_comment_list': {

@@ -2,6 +2,28 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { CliError } from './error.js';
 
+export function classifyFetchError(err: unknown, timeoutSecs: number): CliError {
+  const e = err as {
+    name?: string;
+    message?: string;
+    cause?: { code?: string; message?: string; name?: string };
+  };
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError' || e?.cause?.name === 'TimeoutError') {
+    return new CliError('timeout', `Request timed out after ${timeoutSecs}s`);
+  }
+  const cause = e?.cause;
+  if (cause?.code) {
+    return new CliError(
+      'network',
+      `Could not reach the ClickUp API (${cause.code}): ${cause.message ?? e?.message ?? 'network error'}`
+    );
+  }
+  if (e?.name === 'TypeError' && /fetch failed/i.test(e?.message ?? '')) {
+    return new CliError('network', `Could not reach the ClickUp API: ${e.message}`);
+  }
+  return CliError.client(`Request failed: ${e?.message ?? String(err)}`, 0);
+}
+
 export class ClickUpClient {
   private baseUrl: string;
   private token: string;
@@ -66,7 +88,7 @@ export class ClickUpClient {
       try {
         resp = await fetch(url, options);
       } catch (err: any) {
-        throw CliError.client(`Request failed: ${err?.message ?? String(err)}`, 0);
+        throw classifyFetchError(err, this.timeoutMs / 1000);
       }
 
       this.readRateHeaders(resp);
@@ -115,7 +137,7 @@ export class ClickUpClient {
       try {
         resp = await fetch(url, options);
       } catch (err: any) {
-        throw CliError.client(`Request failed: ${err?.message ?? String(err)}`, 0);
+        throw classifyFetchError(err, this.timeoutMs / 1000);
       }
 
       this.readRateHeaders(resp);

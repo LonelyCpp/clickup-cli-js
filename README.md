@@ -53,13 +53,15 @@ clickup-cli-js task create --list 12345 --name "My Task" --priority 3
 clickup-cli-js task get abc123
 clickup-cli-js task update abc123 --status "in progress"
 clickup-cli-js task search --status "in progress" --assignee 44106202
+clickup-cli-js task batch-update abc123 def456 --add-tag urgent --remove-tag stale
 
 # Token-efficient modes
 clickup-cli-js task list --list 12345 --output compact
-clickup-cli-js task list --list 12345 --output json-compact
+clickup-cli-js task list --list 12345 --output brief
 clickup-cli-js task list --list 12345 --summary
 clickup-cli-js task count --list 12345 --status "in progress"
 clickup-cli-js task list --list 12345 --max-tokens 200
+clickup-cli-js task list --list 12345 --all --output-file /tmp/tasks.json
 
 # Auto-detect task ID from git branch
 clickup-cli-js task get          # resolves abc123 from feat/CU-abc123-foo
@@ -87,19 +89,34 @@ clickup-cli-js view tasks VIEW_ID
 |------|-------------|
 | *(default)* | Aligned table with essential fields |
 | `--output compact` | Pipe-delimited rows, no padding (agent-friendly) |
-| `--output json` | Full API response |
-| `--output json-compact` | Filtered fields as type-preserving JSON |
+| `--output json` | Full API response, or filtered to `--fields` (raw values) if given |
+| `--output json-compact` | Identical data to `json` (respects `--fields` the same way), minified instead of pretty-printed |
+| `--output brief` | Flattened, lightweight JSON: `id, name, status, tags, assignees, description` by default (override with `--fields`) — no raw `custom_fields` or user objects |
 | `--output csv` | CSV format |
 | `-q` / `--quiet` | IDs only, one per line |
 
 ## Token-Efficiency Features
 
-### Type-preserving compact JSON (`json-compact` + MCP)
+### `--fields` restricts JSON too
 
-Numbers and booleans stay native JSON types, not quoted strings:
+`--fields` used to only trim table/compact/csv columns. It now restricts `json`/`json-compact`/`brief` output the same way — with no `--fields`, `json`/`json-compact` return the full raw item; with `--fields`, they return just those fields (raw values, custom fields resolved by name/UUID same as other modes):
 
-```json
-[{"id": "abc", "priority": 3, "active": true, "name": "Fix bug"}]
+```bash
+clickup-cli-js task get abc123 --output json --fields id,name,status
+# [{"id": "abc123", "name": "Fix bug", "status": {"status": "in progress", "color": "#d3d3d3"}}]
+```
+
+### `json` and `json-compact` return identical data
+
+They're now the same data, just formatted differently — `json` is pretty-printed, `json-compact` is minified. Pipe either through `jq` or `JSON.parse` and you get the same structure back.
+
+### Type-preserving compact JSON (`--output brief` + MCP)
+
+Numbers and booleans stay native JSON types, not quoted strings, and nested objects/arrays are flattened to plain names — no raw `custom_fields` definitions or user objects:
+
+```bash
+clickup-cli-js task list --list 123 --output brief
+# [{"id": "abc", "name": "Fix bug", "status": "in progress", "tags": "bug, urgent", "assignees": "alice, bob", "description": "..."}]
 ```
 
 vs the original which stringified everything:
@@ -107,6 +124,27 @@ vs the original which stringified everything:
 ```json
 [{"id": "abc", "priority": "3", "active": "true", "name": "Fix bug"}]
 ```
+
+### `--output-file <path>`
+
+Writes the full response to a file instead of stdout, so large listings survive a terminal or calling tool that truncates output. Stdout gets a short notice instead of the full data:
+
+```bash
+clickup-cli-js task list --list 123 --all --output-file /tmp/tasks.json
+# {"output_file":"/tmp/tasks.json","count":842,"bytes":193021}
+```
+
+### Pagination metadata
+
+If more results exist beyond what was fetched (because `--all` wasn't passed, or the 100-page safety cap was hit), an extra note is printed after the results:
+
+```bash
+clickup-cli-js task list --list 123
+# ...rows...
+# Note: more results available. Pass --all to fetch everything.
+```
+
+In `json`/`json-compact`/`brief` modes the same information is a trailing JSON line: `{"pagination":{"has_more":true,"hint":"..."}}`.
 
 ### `--max-chars N` (default 60)
 
@@ -164,7 +202,7 @@ clickup-cli-js task list --list 123 --max-tokens 200
 | `space` | list, get, create, update, delete |
 | `folder` | list, get, create, update, delete |
 | `list` | list, get, create, update, delete, add-task, remove-task |
-| `task` | list, search, get, create, update, delete, time-in-status, add-tag, remove-tag, add-dep, remove-dep, link, unlink, move, set-estimate, replace-estimates, count |
+| `task` | list, search, get, create, update, delete, time-in-status, add-tag, remove-tag, add-dep, remove-dep, link, unlink, move, set-estimate, replace-estimates, count, batch-update |
 | `comment` | list, create, update, delete, replies, reply |
 | `tag` | list, create, update, delete |
 | `field` | list, set, unset |
@@ -181,8 +219,9 @@ clickup-cli-js task list --list 123 --max-tokens 200
 |------|-------------|
 | `--token TOKEN` | Override config file token |
 | `--workspace ID` | Override default workspace |
-| `--output MODE` | table, compact, json, json-compact, csv |
-| `--fields LIST` | Comma-separated field names |
+| `--output MODE` | table, compact, json, json-compact, csv, brief |
+| `--fields LIST` | Comma-separated field names (restricts JSON output too) |
+| `--output-file PATH` | Write full response to a file; stdout gets a short notice |
 | `--no-header` | Omit table header row |
 | `--all` | Fetch all pages |
 | `--limit N` | Cap total results |
@@ -293,6 +332,8 @@ Or via environment variables: `CLICKUP_MCP_PROFILE`, `CLICKUP_MCP_READ_ONLY`, `C
 | 3 | Not found (404) |
 | 4 | Rate limited (429) |
 | 5 | Server error (5xx) |
+| 6 | Network error (DNS/connection failure — request never reached ClickUp) |
+| 7 | Timeout (exceeded `--timeout`) |
 
 ## Free-form Text Flags
 

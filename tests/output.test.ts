@@ -1,3 +1,6 @@
+import { readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   OutputConfig,
@@ -7,6 +10,7 @@ import {
   fitToTokenBudget,
   flattenValue,
   getFieldValue,
+  projectFields,
   truncateText,
 } from '../src/output.js';
 
@@ -32,7 +36,7 @@ describe('flattenValue', () => {
   it('string array', () => expect(flattenValue(['a', 'b'])).toBe('a, b'));
   it('tags array extracts names', () =>
     expect(flattenValue([{ name: 'bug', tag_fg: '#f00' }, { name: 'urgent' }])).toBe(
-      'bug, urgent',
+      'bug, urgent'
     ));
   it('object with username', () => expect(flattenValue({ username: 'alice' })).toBe('alice'));
 });
@@ -92,6 +96,27 @@ describe('compactItems — TYPE-PRESERVING (Tier A-1)', () => {
   });
 });
 
+describe('projectFields', () => {
+  it('keeps raw nested values, no flattening', () => {
+    const items = [{ id: 'abc', status: { status: 'Open' }, priority: 3 }];
+    const result = projectFields(items, ['id', 'status']);
+    expect(result[0].status).toEqual({ status: 'Open' });
+    expect(result[0].priority).toBeUndefined();
+  });
+  it('missing field → null', () => {
+    const items = [{ id: 'abc' }];
+    const result = projectFields(items, ['id', 'priority']);
+    expect(result[0].priority).toBeNull();
+  });
+  it('resolves custom fields same as getFieldValue', () => {
+    const items = [
+      { id: 'x', custom_fields: [{ id: 'cf1', name: 'Sprint', type: 'text', value: 'Sprint 42' }] },
+    ];
+    const result = projectFields(items, ['id', 'Sprint']);
+    expect(result[0].Sprint).toBe('Sprint 42');
+  });
+});
+
 describe('estimateTokens', () => {
   it('~4 chars per token', () => expect(estimateTokens('hello world!')).toBe(3));
   it('empty string → 0', () => expect(estimateTokens('')).toBe(0));
@@ -142,7 +167,18 @@ describe('getFieldValue — custom fields', () => {
       id: 'abc',
       name: 'Task 1',
       custom_fields: [
-        { id: 'd6a2a4f0-a282-4b99-8ec5-d97d6505d2fa', name: 'Stage', type: 'drop_down', value: 'opt-1', type_config: { options: [{ id: 'opt-1', name: 'Ready' }, { id: 'opt-2', name: 'Blocked' }] } },
+        {
+          id: 'd6a2a4f0-a282-4b99-8ec5-d97d6505d2fa',
+          name: 'Stage',
+          type: 'drop_down',
+          value: 'opt-1',
+          type_config: {
+            options: [
+              { id: 'opt-1', name: 'Ready' },
+              { id: 'opt-2', name: 'Blocked' },
+            ],
+          },
+        },
         { id: 'cf2', name: 'Sprint', type: 'text', value: 'Sprint 42' },
       ],
     },
@@ -163,16 +199,29 @@ describe('getFieldValue — custom fields', () => {
     expect(getFieldValue(items[0], 'nonexistent')).toBeUndefined();
   });
   it('returns null for custom field with no value', () => {
-    const item = { id: 'x', custom_fields: [{ id: 'cf1', name: 'Empty', type: 'text', value: null }] };
+    const item = {
+      id: 'x',
+      custom_fields: [{ id: 'cf1', name: 'Empty', type: 'text', value: null }],
+    };
     expect(getFieldValue(item, 'Empty')).toBeNull();
   });
   it('resolves labels (array) custom field to comma-separated names', () => {
     const item = {
       id: 'x',
-      custom_fields: [{
-        id: 'cf1', name: 'Tags', type: 'labels', value: ['t1', 't2'],
-        type_config: { options: [{ id: 't1', name: 'frontend' }, { id: 't2', name: 'backend' }] },
-      }],
+      custom_fields: [
+        {
+          id: 'cf1',
+          name: 'Tags',
+          type: 'labels',
+          value: ['t1', 't2'],
+          type_config: {
+            options: [
+              { id: 't1', name: 'frontend' },
+              { id: 't2', name: 'backend' },
+            ],
+          },
+        },
+      ],
     };
     expect(getFieldValue(item, 'Tags')).toBe('frontend, backend');
   });
@@ -183,17 +232,27 @@ describe('getFieldValue — custom fields', () => {
         id: 'abc',
         name: 'Task 1',
         custom_fields: [
-          { id: 'd6a2a4f0-a282-4b99-8ec5-d97d6505d2fa', name: 'Stage', type: 'text', value: 'Ready' },
+          {
+            id: 'd6a2a4f0-a282-4b99-8ec5-d97d6505d2fa',
+            name: 'Stage',
+            type: 'text',
+            value: 'Ready',
+          },
         ],
       },
     ];
-    const c = OutputConfig.fromCli('compact', 'id,name,d6a2a4f0-a282-4b99-8ec5-d97d6505d2fa', false, false, 60);
+    const c = OutputConfig.fromCli(
+      'compact',
+      'id,name,d6a2a4f0-a282-4b99-8ec5-d97d6505d2fa',
+      false,
+      false,
+      60
+    );
     const logs = captureLog(() => c.printItems(items, ['id', 'name'], 'id'));
     expect(logs[0]).toBe('id|name|Stage');
     expect(logs[1]).toBe('abc|Task 1|Ready');
   });
 });
-
 
 describe('OutputConfig.printItems', () => {
   const items = [
@@ -250,13 +309,67 @@ describe('OutputConfig.printItems', () => {
     expect(parsed[0].status).toEqual({ status: 'Open' });
   });
 
-  it('json-compact mode prints type-preserving JSON', () => {
-    const c = OutputConfig.fromCli('json-compact', undefined, false, false, 60);
+  it('json-compact mode prints the same structure as json, just minified', () => {
+    const jsonConfig = OutputConfig.fromCli('json', undefined, false, false, 60);
+    const compactConfig = OutputConfig.fromCli('json-compact', undefined, false, false, 60);
+    const jsonLogs = captureLog(() => jsonConfig.printItems(items, fields, 'id'));
+    const compactLogs = captureLog(() => compactConfig.printItems(items, fields, 'id'));
+
+    expect(JSON.parse(jsonLogs.join('\n'))).toEqual(JSON.parse(compactLogs.join('\n')));
+    // json is pretty-printed (embedded newlines), json-compact is a single minified line
+    expect(jsonLogs[0]).toContain('\n');
+    expect(compactLogs[0]).not.toContain('\n');
+    const parsed = JSON.parse(compactLogs[0]);
+    expect(parsed[0].priority).toBe(3);
+    expect(parsed[0].status).toEqual({ status: 'Open' });
+  });
+
+  it('--fields restricts json output to raw (unflattened) field values', () => {
+    const c = OutputConfig.fromCli('json', 'id,status', false, false, 60);
     const logs = captureLog(() => c.printItems(items, fields, 'id'));
     const parsed = JSON.parse(logs.join('\n'));
-    expect(parsed[0].priority).toBe(3);
-    expect(parsed[0].priority).not.toBe('3');
+    expect(Object.keys(parsed[0]).sort()).toEqual(['id', 'status']);
+    expect(parsed[0].status).toEqual({ status: 'Open' });
+    expect(parsed[0].name).toBeUndefined();
+  });
+
+  it('--fields restricts json-compact output identically to json', () => {
+    const jsonConfig = OutputConfig.fromCli('json', 'id,priority', false, false, 60);
+    const compactConfig = OutputConfig.fromCli('json-compact', 'id,priority', false, false, 60);
+    const jsonLogs = captureLog(() => jsonConfig.printItems(items, fields, 'id'));
+    const compactLogs = captureLog(() => compactConfig.printItems(items, fields, 'id'));
+    expect(JSON.parse(jsonLogs.join('\n'))).toEqual(JSON.parse(compactLogs.join('\n')));
+  });
+
+  it('brief mode uses a fixed lightweight default field set, flattened', () => {
+    const briefItems = [
+      {
+        id: 'abc',
+        name: 'Fix bug',
+        status: { status: 'Open' },
+        tags: [{ name: 'bug' }, { name: 'urgent' }],
+        assignees: [{ username: 'alice' }],
+        description: 'Some text',
+        custom_fields: [{ id: 'cf1', name: 'Sprint', type: 'text', value: 'Sprint 1' }],
+      },
+    ];
+    const c = OutputConfig.fromCli('brief', undefined, false, false, 60);
+    const logs = captureLog(() => c.printItems(briefItems, ['id', 'name'], 'id'));
+    const parsed = JSON.parse(logs.join('\n'));
+    expect(Object.keys(parsed[0]).sort()).toEqual(
+      ['assignees', 'description', 'id', 'name', 'status', 'tags'].sort()
+    );
     expect(parsed[0].status).toBe('Open');
+    expect(parsed[0].tags).toBe('bug, urgent');
+    expect(parsed[0].assignees).toBe('alice');
+    expect(parsed[0].custom_fields).toBeUndefined();
+  });
+
+  it('brief mode default fields can be overridden by --fields', () => {
+    const c = OutputConfig.fromCli('brief', 'id,name', false, false, 60);
+    const logs = captureLog(() => c.printItems(items, fields, 'id'));
+    const parsed = JSON.parse(logs.join('\n'));
+    expect(Object.keys(parsed[0]).sort()).toEqual(['id', 'name']);
   });
 
   it('maxChars truncation applied in compact mode', () => {
@@ -353,5 +466,154 @@ describe('OutputConfig.printSummary', () => {
     expect(parsed.summary.total).toBe(3);
     expect(parsed.summary.statuses.Open).toBe(2);
     expect(parsed.summary.overdue).toBe(1);
+  });
+
+  it('prints a pagination note when hasMore is true', () => {
+    const c = OutputConfig.fromCli('table', undefined, false, false, 60);
+    const logs = captureLog(() => c.printSummary(items, 'tasks', { hasMore: true }));
+    expect(logs[1]).toContain('more results available');
+  });
+
+  it('does not print a pagination note when hasMore is false', () => {
+    const c = OutputConfig.fromCli('table', undefined, false, false, 60);
+    const logs = captureLog(() => c.printSummary(items, 'tasks', { hasMore: false }));
+    expect(logs).toHaveLength(1);
+  });
+});
+
+describe('OutputConfig pagination note on printItems', () => {
+  function captureLog(fn: () => void): string[] {
+    const logs: string[] = [];
+    const orig = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+    try {
+      fn();
+    } finally {
+      console.log = orig;
+    }
+    return logs;
+  }
+
+  const items = [{ id: 'abc', name: 'Task 1' }];
+  const fields = ['id', 'name'];
+
+  it('table mode prints a plain-text note when more results exist', () => {
+    const c = OutputConfig.fromCli('table', undefined, false, false, 60);
+    const logs = captureLog(() => c.printItems(items, fields, 'id', { hasMore: true }));
+    expect(logs[logs.length - 1]).toBe(
+      'Note: more results available. Pass --all to fetch everything.'
+    );
+  });
+
+  it('json mode prints a trailing pagination JSON line when more results exist', () => {
+    const c = OutputConfig.fromCli('json', undefined, false, false, 60);
+    const logs = captureLog(() => c.printItems(items, fields, 'id', { hasMore: true }));
+    const note = JSON.parse(logs[logs.length - 1]);
+    expect(note.pagination.has_more).toBe(true);
+  });
+
+  it('prints nothing extra when hasMore is false or omitted', () => {
+    const c = OutputConfig.fromCli('table', undefined, false, false, 60);
+    const logsFalse = captureLog(() => c.printItems(items, fields, 'id', { hasMore: false }));
+    const logsOmitted = captureLog(() => c.printItems(items, fields, 'id'));
+    expect(logsFalse).toHaveLength(1);
+    expect(logsOmitted).toHaveLength(1);
+  });
+
+  it('quiet mode ignores pagination note', () => {
+    const c = OutputConfig.fromCli('table', undefined, false, true, 60);
+    const logs = captureLog(() => c.printItems(items, fields, 'id', { hasMore: true }));
+    expect(logs).toEqual(['abc']);
+  });
+});
+
+describe('OutputConfig --output-file', () => {
+  const items = [
+    { id: 'abc', name: 'Task 1', status: { status: 'Open' } },
+    { id: 'def', name: 'Task 2', status: { status: 'Done' } },
+  ];
+  const fields = ['id', 'name', 'status'];
+
+  function captureLog(fn: () => void): string[] {
+    const logs: string[] = [];
+    const orig = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+    try {
+      fn();
+    } finally {
+      console.log = orig;
+    }
+    return logs;
+  }
+
+  function tempPath(name: string): string {
+    return join(tmpdir(), `clickup-cli-js-output-test-${name}-${process.pid}.json`);
+  }
+
+  it('writes full json content to the file and prints a short JSON notice', () => {
+    const path = tempPath('json');
+    try {
+      const c = OutputConfig.fromCli('json', undefined, false, false, 60, undefined, path);
+      const logs = captureLog(() => c.printItems(items, fields, 'id'));
+
+      const written = JSON.parse(readFileSync(path, 'utf8'));
+      expect(written).toEqual(items);
+
+      expect(logs).toHaveLength(1);
+      const notice = JSON.parse(logs[0]);
+      expect(notice.output_file).toBe(path);
+      expect(notice.count).toBe(2);
+      expect(typeof notice.bytes).toBe('number');
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
+  it('writes table content to the file and prints a plain-text notice', () => {
+    const path = tempPath('table');
+    try {
+      const c = OutputConfig.fromCli('table', undefined, false, false, 60, undefined, path);
+      const logs = captureLog(() => c.printItems(items, fields, 'id'));
+
+      const written = readFileSync(path, 'utf8');
+      expect(written).toContain('abc');
+      expect(written).toContain('Task 1');
+
+      expect(logs).toHaveLength(1);
+      expect(logs[0]).toContain('Wrote 2 item(s)');
+      expect(logs[0]).toContain(path);
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
+  it('includes the pagination note alongside the file notice', () => {
+    const path = tempPath('pagination');
+    try {
+      const c = OutputConfig.fromCli('json', undefined, false, false, 60, undefined, path);
+      const logs = captureLog(() => c.printItems(items, fields, 'id', { hasMore: true }));
+      const notice = JSON.parse(logs[0]);
+      expect(notice.pagination.has_more).toBe(true);
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
+  it('takes precedence over quiet mode', () => {
+    const path = tempPath('quiet');
+    try {
+      const c = OutputConfig.fromCli('table', undefined, false, true, 60, undefined, path);
+      const logs = captureLog(() => c.printItems(items, fields, 'id'));
+      expect(readFileSync(path, 'utf8')).toContain('abc');
+      expect(logs[0]).toContain('Wrote 2 item(s)');
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
+  it('throws a CliError with kind io when the path is unwritable', () => {
+    const path = '/nonexistent-dir-xyz/out.json';
+    const c = OutputConfig.fromCli('json', undefined, false, false, 60, undefined, path);
+    expect(() => c.printItems(items, fields, 'id')).toThrowError(/Failed to write --output-file/);
   });
 });

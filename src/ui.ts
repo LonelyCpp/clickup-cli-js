@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import figures from 'figures';
 import ora from 'ora';
 
-const NON_DECORATED_MODES = ['json', 'json-compact', 'csv', 'compact'];
+const NON_DECORATED_MODES = ['json', 'json-compact', 'csv', 'compact', 'brief'];
 
 export class UI {
   private enabled: boolean;

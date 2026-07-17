@@ -13,8 +13,16 @@ program
   .version('0.1.0')
   .option('--token <token>', 'API token (overrides config file)')
   .option('--workspace <id>', 'Workspace ID (overrides config default)')
-  .option('--output <mode>', 'Output format: table, compact, json, json-compact, csv', 'table')
+  .option(
+    '--output <mode>',
+    'Output format: table, compact, json, json-compact, csv, brief',
+    'table'
+  )
   .option('--fields <list>', 'Comma-separated list of fields to display')
+  .option(
+    '--output-file <path>',
+    'Write the full response to a file; stdout gets a short notice instead'
+  )
   .option('--no-header', 'Omit table header row', false)
   .option('--all', 'Fetch all pages', false)
   .option('--limit <n>', 'Cap total results', parseIntArg)
@@ -37,7 +45,7 @@ registerCommands(program);
 
 program.hook('preAction', () => {
   const opts = program.opts() as Record<string, unknown>;
-  const validModes = ['table', 'compact', 'json', 'json-compact', 'csv'];
+  const validModes = ['table', 'compact', 'json', 'json-compact', 'csv', 'brief'];
   if (typeof opts.output === 'string' && !validModes.includes(opts.output)) {
     throw new CliError(
       'client',

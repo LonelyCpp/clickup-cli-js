@@ -28,14 +28,14 @@ export function registerSpace(program: Command): void {
       ctx.ui.startSpinner('Fetching spaces...');
       const workspaceId = ctx.resolveWorkspace();
       const archived = opts.archived ? 'true' : 'false';
-      const items = await walkPage(
+      const { items, hasMore } = await walkPage(
         ctx.client,
         'spaces',
         (page) => `/v2/team/${workspaceId}/space?archived=${archived}&page=${page}`,
         { all: ctx.cli.all, limit: ctx.cli.limit, page: ctx.cli.page }
       );
       ctx.ui.stopSpinner();
-      ctx.output.printItems(items, ['id', 'name', 'private', 'archived'], 'id');
+      ctx.output.printItems(items, ['id', 'name', 'private', 'archived'], 'id', { hasMore });
     });
 
   space

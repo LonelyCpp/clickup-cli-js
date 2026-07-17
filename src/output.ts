@@ -1,6 +1,12 @@
+import { writeFileSync } from 'node:fs';
 import Table from 'cli-table3';
+import { CliError } from './error.js';
 
-export type OutputMode = 'table' | 'compact' | 'json' | 'json-compact' | 'csv';
+export type OutputMode = 'table' | 'compact' | 'json' | 'json-compact' | 'csv' | 'brief';
+
+export interface PageInfo {
+  hasMore: boolean;
+}
 
 export interface OutputConfigOptions {
   mode: OutputMode;
@@ -9,7 +15,10 @@ export interface OutputConfigOptions {
   quiet: boolean;
   maxChars: number;
   maxTokens?: number;
+  outputFile?: string;
 }
+
+const BRIEF_FIELDS = ['id', 'name', 'status', 'tags', 'assignees', 'description'];
 
 export function flattenValue(value: unknown): string {
   if (value === null || value === undefined) return '-';
@@ -49,7 +58,7 @@ export function flattenValue(value: unknown): string {
 
 export function truncateText(value: string, maxChars: number): string {
   if (maxChars === 0 || value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars)}\u2026`;
+  return `${value.slice(0, maxChars)}…`;
 }
 
 function truncateForDisplay(value: unknown, maxChars: number): string {
@@ -85,7 +94,8 @@ function extractCustomFieldValue(cf: Record<string, unknown>): unknown {
       const names = ids
         .map((id) => {
           const opt = options.find(
-            (o: unknown) => o !== null && typeof o === 'object' && (o as Record<string, unknown>).id === id
+            (o: unknown) =>
+              o !== null && typeof o === 'object' && (o as Record<string, unknown>).id === id
           );
           return opt ? (opt as Record<string, unknown>).name : id;
         })
@@ -96,10 +106,7 @@ function extractCustomFieldValue(cf: Record<string, unknown>): unknown {
   return cf.value;
 }
 
-function resolveFieldLabels(
-  items: Record<string, unknown>[],
-  fields: string[]
-): string[] {
+function resolveFieldLabels(items: Record<string, unknown>[], fields: string[]): string[] {
   const uuidToName = new Map<string, string>();
   for (const item of items) {
     const cfs = item.custom_fields;
@@ -107,7 +114,11 @@ function resolveFieldLabels(
       for (const cf of cfs) {
         if (cf !== null && typeof cf === 'object') {
           const obj = cf as Record<string, unknown>;
-          if (typeof obj.id === 'string' && typeof obj.name === 'string' && !uuidToName.has(obj.id)) {
+          if (
+            typeof obj.id === 'string' &&
+            typeof obj.name === 'string' &&
+            !uuidToName.has(obj.id)
+          ) {
             uuidToName.set(obj.id, obj.name);
           }
         }
@@ -125,6 +136,7 @@ export class OutputConfig {
   quiet: boolean;
   maxChars: number;
   maxTokens?: number;
+  outputFile?: string;
 
   constructor(opts: OutputConfigOptions) {
     this.mode = opts.mode;
@@ -133,6 +145,7 @@ export class OutputConfig {
     this.quiet = opts.quiet;
     this.maxChars = opts.maxChars;
     this.maxTokens = opts.maxTokens;
+    this.outputFile = opts.outputFile;
   }
 
   static fromCli(
@@ -141,7 +154,8 @@ export class OutputConfig {
     noHeader: boolean,
     quiet: boolean,
     maxChars: number,
-    maxTokens?: number
+    maxTokens?: number,
+    outputFile?: string
   ): OutputConfig {
     return new OutputConfig({
       mode: mode as OutputMode,
@@ -155,10 +169,27 @@ export class OutputConfig {
       quiet,
       maxChars,
       maxTokens,
+      outputFile,
     });
   }
 
-  printItems(items: Record<string, unknown>[], defaultFields: string[], idField: string): void {
+  private isJsonMode(): boolean {
+    return this.mode === 'json' || this.mode === 'json-compact' || this.mode === 'brief';
+  }
+
+  printItems(
+    items: Record<string, unknown>[],
+    defaultFields: string[],
+    idField: string,
+    pageInfo?: PageInfo
+  ): void {
+    const fields = this.fields ?? defaultFields;
+
+    if (this.outputFile) {
+      this.writeToFile(items, fields, pageInfo);
+      return;
+    }
+
     if (this.quiet) {
       for (const item of items) {
         const id = item[idField];
@@ -166,8 +197,6 @@ export class OutputConfig {
       }
       return;
     }
-
-    const fields = this.fields ?? defaultFields;
 
     if (this.maxTokens != null && this.maxTokens > 0 && items.length > 0) {
       const fitted = fitToTokenBudget(items, fields, this.mode, this.maxTokens);
@@ -181,59 +210,117 @@ export class OutputConfig {
           })
         );
       }
+      this.printPaginationNote(pageInfo);
       return;
     }
 
     this.renderItems(items, fields);
+    this.printPaginationNote(pageInfo);
   }
 
-  private renderItems(items: Record<string, unknown>[], fields: string[]): void {
-    switch (this.mode) {
-      case 'json':
-        console.log(JSON.stringify(items, null, 2));
-        break;
-      case 'json-compact':
-        console.log(JSON.stringify(compactItems(items, fields, this.maxChars), null, 2));
-        break;
-      case 'compact':
-        this.renderCompact(items, fields);
-        break;
-      case 'csv':
-        this.renderCsv(items, fields);
-        break;
-      default:
-        this.renderTable(items, fields);
-        break;
+  private writeToFile(
+    items: Record<string, unknown>[],
+    fields: string[],
+    pageInfo?: PageInfo
+  ): void {
+    const lines = this.renderLines(items, fields);
+    const content = lines.join('\n');
+    try {
+      writeFileSync(this.outputFile as string, `${content}\n`, 'utf8');
+    } catch (err) {
+      throw CliError.io(
+        `Failed to write --output-file '${this.outputFile}': ${(err as Error).message}`
+      );
+    }
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (this.isJsonMode()) {
+      const payload: Record<string, unknown> = {
+        output_file: this.outputFile,
+        count: items.length,
+        bytes,
+      };
+      if (pageInfo?.hasMore) {
+        payload.pagination = { has_more: true };
+      }
+      console.log(JSON.stringify(payload));
+    } else {
+      console.log(`Wrote ${items.length} item(s) (${bytes} bytes) to ${this.outputFile}`);
+    }
+    this.printPaginationNote(pageInfo);
+  }
+
+  private printPaginationNote(pageInfo?: PageInfo): void {
+    if (!pageInfo?.hasMore) return;
+    if (this.isJsonMode()) {
+      console.log(
+        JSON.stringify({
+          pagination: {
+            has_more: true,
+            hint: 'Pass --all to fetch every page (or --page/--cursor/--start/--start-id to continue manually).',
+          },
+        })
+      );
+    } else {
+      console.log('Note: more results available. Pass --all to fetch everything.');
     }
   }
 
-  private renderTable(items: Record<string, unknown>[], fields: string[]): void {
+  private renderItems(items: Record<string, unknown>[], fields: string[]): void {
+    for (const line of this.renderLines(items, fields)) {
+      console.log(line);
+    }
+  }
+
+  private renderLines(items: Record<string, unknown>[], fields: string[]): string[] {
+    switch (this.mode) {
+      case 'json':
+        return [JSON.stringify(this.fields ? projectFields(items, this.fields) : items, null, 2)];
+      case 'json-compact':
+        return [JSON.stringify(this.fields ? projectFields(items, this.fields) : items)];
+      case 'brief': {
+        const briefFields = this.fields ?? BRIEF_FIELDS;
+        return [JSON.stringify(compactItems(items, briefFields, this.maxChars), null, 2)];
+      }
+      case 'compact':
+        return this.compactLines(items, fields);
+      case 'csv':
+        return this.csvLines(items, fields);
+      default:
+        return [this.tableString(items, fields)];
+    }
+  }
+
+  private tableString(items: Record<string, unknown>[], fields: string[]): string {
     const labels = resolveFieldLabels(items, fields);
     const table = new Table({ head: labels, wordWrap: true });
     for (const item of items) {
       table.push(fields.map((f) => truncateForDisplay(getFieldValue(item, f), this.maxChars)));
     }
-    console.log(table.toString());
+    return table.toString();
   }
 
-  private renderCompact(items: Record<string, unknown>[], fields: string[]): void {
-    if (!this.noHeader) console.log(resolveFieldLabels(items, fields).join('|'));
+  private compactLines(items: Record<string, unknown>[], fields: string[]): string[] {
+    const lines: string[] = [];
+    if (!this.noHeader) lines.push(resolveFieldLabels(items, fields).join('|'));
     for (const item of items) {
       const row = fields.map((f) => truncateForDisplay(getFieldValue(item, f), this.maxChars));
-      console.log(row.join('|'));
+      lines.push(row.join('|'));
     }
+    return lines;
   }
 
-  private renderCsv(items: Record<string, unknown>[], fields: string[]): void {
-    if (!this.noHeader) console.log(resolveFieldLabels(items, fields).join(','));
+  private csvLines(items: Record<string, unknown>[], fields: string[]): string[] {
+    const lines: string[] = [];
+    if (!this.noHeader) lines.push(resolveFieldLabels(items, fields).join(','));
     for (const item of items) {
       const row = fields.map((f) => {
         const val = truncateForDisplay(getFieldValue(item, f), this.maxChars);
         if (val.includes(',')) return `"${val.replace(/"/g, '""')}"`;
         return val;
       });
-      console.log(row.join(','));
+      lines.push(row.join(','));
     }
+    return lines;
   }
 
   printSingle(item: Record<string, unknown>, defaultFields: string[], idField: string): void {
@@ -241,21 +328,37 @@ export class OutputConfig {
   }
 
   printMessage(message: string): void {
-    if (this.mode === 'json' || this.mode === 'json-compact') {
+    if (this.isJsonMode()) {
       console.log(JSON.stringify({ message }));
     } else {
       console.log(message);
     }
   }
 
-  printSummary(items: Record<string, unknown>[], noun: string): void {
-    if (this.mode === 'json' || this.mode === 'json-compact') {
+  printSummary(items: Record<string, unknown>[], noun: string, pageInfo?: PageInfo): void {
+    if (this.isJsonMode()) {
       const summary = buildSummary(items);
       console.log(JSON.stringify({ summary }, null, 2));
+      this.printPaginationNote(pageInfo);
       return;
     }
     console.log(formatSummary(items, noun));
+    this.printPaginationNote(pageInfo);
   }
+}
+
+export function projectFields(
+  items: Record<string, unknown>[],
+  fields: string[]
+): Record<string, unknown>[] {
+  return items.map((item) => {
+    const obj: Record<string, unknown> = {};
+    for (const field of fields) {
+      const value = getFieldValue(item, field);
+      obj[field] = value === undefined ? null : value;
+    }
+    return obj;
+  });
 }
 
 export function compactItems(
@@ -294,7 +397,7 @@ export function fitToTokenBudget(
 ): { items: Record<string, unknown>[]; truncated: boolean; shown: number; total: number } {
   let usedTokens = 0;
   const headerTokens =
-    mode === 'json' || mode === 'json-compact'
+    mode === 'json' || mode === 'json-compact' || mode === 'brief'
       ? estimateTokens('[]')
       : estimateTokens(fields.join('|'));
   usedTokens += headerTokens;
@@ -302,7 +405,7 @@ export function fitToTokenBudget(
   const fitting: Record<string, unknown>[] = [];
   for (const item of items) {
     let itemText: string;
-    if (mode === 'json' || mode === 'json-compact') {
+    if (mode === 'json' || mode === 'json-compact' || mode === 'brief') {
       itemText = JSON.stringify(compactItems([item], fields));
     } else {
       itemText = fields.map((f) => flattenValue(getFieldValue(item, f))).join('|');

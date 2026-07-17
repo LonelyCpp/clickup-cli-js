@@ -143,7 +143,7 @@ export function registerTask(program: Command): void {
         const base = params.toString();
 
         ctx.ui.startSpinner('Fetching tasks...');
-        const items = await walkPage(
+        const { items, hasMore } = await walkPage(
           ctx.client,
           'tasks',
           (page) => `/v2/list/${opts.list}/task?${base}&page=${page}`,
@@ -152,9 +152,9 @@ export function registerTask(program: Command): void {
         ctx.ui.stopSpinner();
 
         if (opts.summary) {
-          ctx.output.printSummary(items, 'tasks');
+          ctx.output.printSummary(items, 'tasks', { hasMore });
         } else {
-          ctx.output.printItems(items, TASK_FIELDS, 'id');
+          ctx.output.printItems(items, TASK_FIELDS, 'id', { hasMore });
         }
       }
     );
@@ -192,7 +192,7 @@ export function registerTask(program: Command): void {
         const base = params.toString();
 
         ctx.ui.startSpinner('Fetching tasks...');
-        const items = await walkPage(
+        const { items, hasMore } = await walkPage(
           ctx.client,
           'tasks',
           (page) => `/v2/team/${ws}/task?${base}&page=${page}`,
@@ -200,7 +200,7 @@ export function registerTask(program: Command): void {
         );
         ctx.ui.stopSpinner();
 
-        ctx.output.printItems(items, TASK_FIELDS, 'id');
+        ctx.output.printItems(items, TASK_FIELDS, 'id', { hasMore });
       }
     );
 
@@ -676,7 +676,7 @@ export function registerTask(program: Command): void {
       const base = params.toString();
 
       ctx.ui.startSpinner('Fetching tasks...');
-      const items = await walkPage(
+      const { items, hasMore } = await walkPage(
         ctx.client,
         'tasks',
         (page) => `/v2/list/${opts.list}/task?${base}&page=${page}`,
@@ -685,5 +685,71 @@ export function registerTask(program: Command): void {
       ctx.ui.stopSpinner();
 
       console.log(items.length);
+      if (hasMore) {
+        process.stderr.write(
+          'Warning: page-fetch safety limit reached; count may be a lower bound.\n'
+        );
+      }
     });
+
+  task
+    .command('batch-update')
+    .description('Update title/tags on multiple tasks; reports per-task success/failure')
+    .argument('<ids...>', 'Task IDs')
+    .option('--name <name>', 'New name to apply to all tasks')
+    .option('--add-tag <tag...>', 'Tag to add (repeatable)')
+    .option('--remove-tag <tag...>', 'Tag to remove (repeatable)')
+    .action(
+      async (
+        ids: string[],
+        opts: { name?: string; addTag?: string[]; removeTag?: string[] },
+        cmd: Command
+      ) => {
+        const ctx = buildContext(cmd);
+        if (!opts.name && !opts.addTag?.length && !opts.removeTag?.length) {
+          throw CliError.client('Provide --name, --add-tag, or --remove-tag.');
+        }
+
+        const results: Record<string, unknown>[] = [];
+        ctx.ui.startSpinner(`Updating ${ids.length} task(s)...`);
+        for (const rawId of ids) {
+          const resolved = parseTaskId(rawId);
+          try {
+            if (opts.name) {
+              await ctx.client.put(`/v2/task/${resolved.id}${customQuery(ctx, resolved)}`, {
+                name: opts.name,
+              });
+            }
+            for (const tag of opts.addTag ?? []) {
+              await ctx.client.post(
+                `/v2/task/${resolved.id}/tag/${encodeURIComponent(tag)}${customQuery(ctx, resolved)}`,
+                {}
+              );
+            }
+            for (const tag of opts.removeTag ?? []) {
+              await ctx.client.delete(
+                `/v2/task/${resolved.id}/tag/${encodeURIComponent(tag)}${customQuery(ctx, resolved)}`
+              );
+            }
+            results.push({ id: resolved.raw, ok: true, error: null });
+          } catch (e) {
+            results.push({
+              id: resolved.raw,
+              ok: false,
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+        ctx.ui.stopSpinner();
+
+        ctx.output.printItems(results, ['id', 'ok', 'error'], 'id');
+        const failed = results.filter((r) => !r.ok).length;
+        ctx.output.printMessage(
+          `${results.length - failed}/${results.length} tasks updated successfully`
+        );
+        if (failed > 0) {
+          process.exitCode = 1;
+        }
+      }
+    );
 }

@@ -23,7 +23,8 @@ export function createContext(cli: CliOptions, config: Config): Context {
     cli.noHeader,
     cli.quiet,
     cli.maxChars,
-    cli.maxTokens
+    cli.maxTokens,
+    cli.outputFile
   );
   const ui = createUI({ outputMode: cli.output, quiet: cli.quiet });
 

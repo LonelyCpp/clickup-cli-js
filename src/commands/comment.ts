@@ -78,7 +78,7 @@ export function registerComment(program: Command): void {
         const scope = resolveScope(opts);
         const base = scopeBasePath(scope);
         ctx.ui.startSpinner('Fetching comments...');
-        const items = await walkStartId(
+        const { items, hasMore } = await walkStartId(
           ctx.client,
           'comments',
           (start, startId) => withStartParams(base, start, startId),
@@ -91,9 +91,9 @@ export function registerComment(program: Command): void {
         );
         ctx.ui.stopSpinner();
         if (opts.summary) {
-          ctx.output.printSummary(items, 'comments');
+          ctx.output.printSummary(items, 'comments', { hasMore });
         } else {
-          ctx.output.printItems(items, COMMENT_FIELDS, 'id');
+          ctx.output.printItems(items, COMMENT_FIELDS, 'id', { hasMore });
         }
       }
     );
@@ -170,7 +170,7 @@ export function registerComment(program: Command): void {
     .action(async (id: string, _opts: Record<string, unknown>, cmd: Command) => {
       const ctx = buildContext(cmd);
       ctx.ui.startSpinner('Fetching replies...');
-      const items = await walkStartId(
+      const { items, hasMore } = await walkStartId(
         ctx.client,
         'comments',
         (start, startId) => withStartParams(`/v2/comment/${id}/reply`, start, startId),
@@ -182,7 +182,7 @@ export function registerComment(program: Command): void {
         }
       );
       ctx.ui.stopSpinner();
-      ctx.output.printItems(items, COMMENT_FIELDS, 'id');
+      ctx.output.printItems(items, COMMENT_FIELDS, 'id', { hasMore });
     });
 
   comment

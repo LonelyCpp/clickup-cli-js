@@ -149,7 +149,7 @@ export function registerView(program: Command): void {
     .action(async (id: string, opts: { summary?: boolean }, cmd: Command) => {
       const ctx = buildContext(cmd);
       ctx.ui.startSpinner('Fetching view tasks...');
-      const items = await walkPage(
+      const { items, hasMore } = await walkPage(
         ctx.client,
         'tasks',
         (page) => `/v2/view/${id}/task?page=${page}`,
@@ -158,9 +158,9 @@ export function registerView(program: Command): void {
       ctx.ui.stopSpinner();
 
       if (opts.summary) {
-        ctx.output.printSummary(items, 'tasks');
+        ctx.output.printSummary(items, 'tasks', { hasMore });
       } else {
-        ctx.output.printItems(items, TASK_FIELDS, 'id');
+        ctx.output.printItems(items, TASK_FIELDS, 'id', { hasMore });
       }
     });
 }
