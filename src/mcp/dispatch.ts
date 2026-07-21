@@ -634,6 +634,19 @@ export async function dispatchTool(
       const items = Array.isArray(res?.fields) ? res.fields : [];
       return compactItems(items, FIELD_FIELDS);
     }
+    case 'clickup_field_create': {
+      const listId = requireStr(args, 'list_id');
+      const name = requireStr(args, 'name');
+      const type = requireStr(args, 'type');
+      const body: Record<string, unknown> = { name, type };
+      if (boolArg(args, 'required') === true) body.required = true;
+      const typeConfig = args.type_config;
+      if (typeConfig !== undefined && typeof typeConfig === 'object') {
+        body.type_config = typeConfig;
+      }
+      const resp = await client.post(`/v2/list/${listId}/field`, body);
+      return compactItems([resp?.field ?? resp], FIELD_FIELDS)[0];
+    }
     case 'clickup_field_set': {
       const fieldId = requireStr(args, 'field_id');
       const taskId = requireStr(args, 'task_id');

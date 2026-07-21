@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isFieldId, resolveFieldId, taskHasFieldValue } from '../src/commands/field.js';
+import {
+  isFieldId,
+  parseTypeConfig,
+  resolveFieldId,
+  taskHasFieldValue,
+} from '../src/commands/field.js';
 
 describe('isFieldId', () => {
   it('returns true for a lowercase UUID', () => {
@@ -84,5 +89,22 @@ describe('taskHasFieldValue', () => {
 
   it('returns false when task has no custom_fields', () => {
     expect(taskHasFieldValue({ id: 't2' }, '5dc86497-098d-4bb0-87d6-cf28e43812e7')).toBe(false);
+  });
+});
+
+describe('parseTypeConfig', () => {
+  it('returns undefined for empty input', () => {
+    expect(parseTypeConfig(undefined)).toBeUndefined();
+    expect(parseTypeConfig('')).toBeUndefined();
+  });
+
+  it('parses a JSON string into an object', () => {
+    expect(parseTypeConfig('{"options":[{"name":"A"}]}')).toEqual({
+      options: [{ name: 'A' }],
+    });
+  });
+
+  it('throws a client error for invalid JSON', () => {
+    expect(() => parseTypeConfig('not-json')).toThrow('Invalid --type-config JSON');
   });
 });

@@ -4,6 +4,7 @@ import { ConfigManager } from '../config.js';
 import { type Context, createContext } from '../context.js';
 import { CliError } from '../error.js';
 import { type ResolvedTask, requireTask } from '../git.js';
+import { resolveValueArg } from '../input.js';
 
 function getRoot(cmd: Command): Command {
   let root = cmd;
@@ -71,6 +72,16 @@ export function taskHasFieldValue(task: unknown, fieldId: string): boolean {
   return false;
 }
 
+export function parseTypeConfig(raw: string | undefined): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  const resolved = resolveValueArg(raw);
+  try {
+    return JSON.parse(resolved) as Record<string, unknown>;
+  } catch (e) {
+    throw CliError.client(`Invalid --type-config JSON: ${(e as Error).message}`);
+  }
+}
+
 export function registerField(program: Command): void {
   const field = program.command('field').description('Manage custom fields');
 
@@ -113,6 +124,42 @@ export function registerField(program: Command): void {
         ctx.ui.stopSpinner();
         const items = Array.isArray(resp?.fields) ? resp.fields : [];
         ctx.output.printItems(items, FIELD_FIELDS, 'id');
+      }
+    );
+
+  field
+    .command('create')
+    .description('Create a custom field in a list (requires plan that supports field creation)')
+    .requiredOption('--list <id>', 'List ID')
+    .requiredOption('--name <name>', 'Field name')
+    .requiredOption('--type <type>', 'Field type (e.g. short_text, text, number, drop_down, date)')
+    .option('--required', 'Mark the field as required')
+    .option('--type-config <json>', 'JSON type_config (or @file/@-/@@text)')
+    .action(
+      async (
+        opts: {
+          list: string;
+          name: string;
+          type: string;
+          required?: boolean;
+          typeConfig?: string;
+        },
+        cmd: Command
+      ) => {
+        const ctx = buildContext(cmd);
+        const body: Record<string, unknown> = {
+          name: opts.name,
+          type: opts.type,
+        };
+        if (opts.required) body.required = true;
+        const typeConfig = parseTypeConfig(opts.typeConfig);
+        if (typeConfig) body.type_config = typeConfig;
+
+        ctx.ui.startSpinner('Creating field...');
+        const resp = await ctx.client.post(`/v2/list/${opts.list}/field`, body);
+        ctx.ui.stopSpinner();
+
+        ctx.output.printSingle(resp?.field ?? resp, FIELD_FIELDS, 'id');
       }
     );
 

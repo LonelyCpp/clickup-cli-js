@@ -787,6 +787,29 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     _group: 'field',
   },
   {
+    name: 'clickup_field_create',
+    description:
+      'Create a custom field in a list. Returns the created field {id, name, type, required}. Requires a plan that supports field creation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        list_id: { type: 'string', description: 'List ID' },
+        name: { type: 'string', description: 'Field name' },
+        type: {
+          type: 'string',
+          description: 'Field type (e.g. short_text, text, number, drop_down, date)',
+        },
+        required: { type: 'boolean', description: 'Mark the field as required' },
+        type_config: {
+          type: 'object',
+          description: 'Optional type_config object (for drop_down, labels, currency, etc.)',
+        },
+      },
+      required: ['list_id', 'name', 'type'],
+    },
+    _group: 'field',
+  },
+  {
     name: 'clickup_field_set',
     description: 'Set a custom field value on a task.',
     inputSchema: {

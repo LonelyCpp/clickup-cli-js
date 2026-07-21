@@ -222,7 +222,7 @@ set. JSON output never gets decoration. Exposes `spinner`, `success`,
 - **task**: `list`, `search`, `get [--subtasks] [--custom-task-id] [--markdown]`, `create`, `update`, `delete`, `time-in-status`, `add-tag`, `remove-tag`, `add-dep`, `remove-dep`, `link`, `unlink`, `move`, `set-estimate`, `replace-estimates` (largest group — port `task.rs` closely)
 - **comment**: `list`, `create`, `update`, `delete`, `replies`, `reply`
 - **tag**: `list`, `create`, `update`, `delete` (note the `tag_fg`/`tag_bg` vs `fg_color`/`bg_color` API quirk)
-- **field**: `list`, `set`, `unset`, `ensure`
+- **field**: `list`, `create`, `set`, `unset`, `ensure`
 - **time**: `list`, `get`, `current`, `create`, `update`, `delete`, `start`, `stop`, `tags`, `add-tags`, `remove-tags`, `rename-tag`, `history`
 - **view**: `list`, `get`, `create`, `update`, `delete`, `tasks`
 - **member**: `list`; **user**: `invite`, `get`, `update`, `remove`

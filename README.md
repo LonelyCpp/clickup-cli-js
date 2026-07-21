@@ -72,6 +72,7 @@ clickup-cli-js comment list --task abc123
 clickup-cli-js comment create --task abc123 --text "Looking good!"
 clickup-cli-js tag list --space 12345
 clickup-cli-js field list --list 12345
+clickup-cli-js field create --list 12345 --name "Release Version" --type short_text
 clickup-cli-js field ensure "Priority" abc123 --value "High"
 
 # Time tracking
@@ -206,7 +207,7 @@ clickup-cli-js task list --list 123 --max-tokens 200
 | `task` | list, search, get, create, update, delete, time-in-status, add-tag, remove-tag, add-dep, remove-dep, link, unlink, move, set-estimate, replace-estimates, count, batch-update |
 | `comment` | list, create, update, delete, replies, reply |
 | `tag` | list, create, update, delete |
-| `field` | list, set, unset, ensure |
+| `field` | list, create, set, unset, ensure |
 | `time` | list, get, current, create, update, delete, start, stop, tags, add-tags, remove-tags, rename-tag, history |
 | `view` | list, get, create, update, delete, tasks |
 | `member` | list |
@@ -266,7 +267,7 @@ The CLI includes an MCP (Model Context Protocol) server for LLM tool integration
 clickup-cli-js mcp serve
 ```
 
-Exposes 61 tools covering all implemented ClickUp API endpoints. Responses use type-preserving compact JSON for token efficiency.
+Exposes 62 tools covering all implemented ClickUp API endpoints. Responses use type-preserving compact JSON for token efficiency.
 
 Add to your MCP client config (e.g., `.mcp.json`):
 
