@@ -6,7 +6,7 @@
   "author": "",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/LonelyCpp/clickup-cli-js.git"
   },
   "keywords": [
     "clickup",
