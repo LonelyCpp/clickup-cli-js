@@ -1,6 +1,6 @@
 {
   "name": "clickup-cli-js",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "CLI for the ClickUp API, optimized for AI agents (TypeScript port)",
   "license": "Apache-2.0",
   "author": "",
