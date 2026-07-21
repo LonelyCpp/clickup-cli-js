@@ -36,17 +36,23 @@ export class ConfigManager {
 
   static load(): Config {
     const projectPath = ConfigManager.findProjectConfig(process.cwd());
+    let projectConfig: Config | null = null;
     if (projectPath) {
-      const cfg = ConfigManager.loadFrom(projectPath);
-      if (cfg.auth?.token) {
-        return cfg;
+      projectConfig = ConfigManager.loadFrom(projectPath);
+      if (projectConfig.auth?.token) {
+        return projectConfig;
       }
     }
     const globalPath = ConfigManager.configPath();
     if (existsSync(globalPath)) {
       return ConfigManager.loadFrom(globalPath);
     }
-    throw new CliError('config', 'Not configured');
+    // No config file on disk. Don't fail here — fall back to a token-less
+    // project config if we found one (keeps its workspace/output defaults),
+    // otherwise an empty config. resolveToken()/resolveWorkspace() then pick
+    // up --token / CLICKUP_TOKEN (and env workspace) and raise an accurate
+    // error only if nothing is available anywhere.
+    return projectConfig ?? ConfigManager.default();
   }
 
   static loadFrom(path: string): Config {

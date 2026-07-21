@@ -111,16 +111,25 @@ describe('ConfigManager.load', () => {
     vi.restoreAllMocks();
   });
 
-  it('throws CliError(config) when no config exists', () => {
+  it('returns an empty config when no config exists', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'cu-cfg-'));
     vi.spyOn(process, 'cwd').mockReturnValue(tmp);
     vi.spyOn(ConfigManager, 'configPath').mockReturnValue(join(tmp, 'nonexistent.json'));
-    expect(() => ConfigManager.load()).toThrow(CliError);
+    expect(ConfigManager.load()).toEqual(ConfigManager.default());
+    rmSync(tmp, { recursive: true });
+  });
+
+  it('lets CLICKUP_TOKEN resolve when no config file exists', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'cu-cfg-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(tmp);
+    vi.spyOn(ConfigManager, 'configPath').mockReturnValue(join(tmp, 'nonexistent.json'));
+    const orig = process.env.CLICKUP_TOKEN;
+    process.env.CLICKUP_TOKEN = 'ci-token';
     try {
-      ConfigManager.load();
-      throw new Error('should have thrown');
-    } catch (e) {
-      expect((e as CliError).kind).toBe('config');
+      expect(resolveToken(undefined, ConfigManager.load())).toBe('ci-token');
+    } finally {
+      if (orig === undefined) Reflect.deleteProperty(process.env, 'CLICKUP_TOKEN');
+      else process.env.CLICKUP_TOKEN = orig;
     }
     rmSync(tmp, { recursive: true });
   });
@@ -150,14 +159,19 @@ describe('ConfigManager.load', () => {
     rmSync(tmp, { recursive: true });
   });
 
-  it('throws when project config has empty token and no global config', () => {
+  it('returns the token-less project config when there is no global config', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'cu-cfg-'));
     const sub = join(tmp, 'sub');
     mkdirSync(sub, { recursive: true });
-    writeFileSync(join(tmp, '.clickup.json'), JSON.stringify({ auth: { token: '' } }));
+    writeFileSync(
+      join(tmp, '.clickup.json'),
+      JSON.stringify({ auth: { token: '' }, defaults: { workspace_id: 'ws-proj' } })
+    );
     vi.spyOn(process, 'cwd').mockReturnValue(sub);
     vi.spyOn(ConfigManager, 'configPath').mockReturnValue(join(tmp, 'nope.json'));
-    expect(() => ConfigManager.load()).toThrow(CliError);
+    const loaded = ConfigManager.load();
+    expect(loaded.auth.token).toBe('');
+    expect(loaded.defaults.workspace_id).toBe('ws-proj');
     rmSync(tmp, { recursive: true });
   });
 });

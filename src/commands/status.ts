@@ -40,15 +40,18 @@ export function registerStatus(program: Command): void {
       const gitEnabled = config.git.enabled ?? true;
       const gitVerbose = config.git.verbose ?? true;
 
-      const content = [
+      const lines = [
         'clickup-cli-js',
         '',
         `Config:    ${configPath}`,
         `Token:     ${maskedToken}`,
         `Workspace: ${workspace}`,
         `Git detect: ${gitEnabled ? 'enabled' : 'disabled'} (verbose: ${gitVerbose ? 'on' : 'off'})`,
-      ].join('\n');
+      ];
+      if (!token) {
+        lines.push('', "Run 'clickup-cli-js setup' to configure.");
+      }
 
-      ui.box(content, { padding: 1 });
+      ui.box(lines.join('\n'), { padding: 1 });
     });
 }
