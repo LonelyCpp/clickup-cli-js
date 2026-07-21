@@ -813,6 +813,21 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     },
     _group: 'field',
   },
+  {
+    name: 'clickup_field_ensure',
+    description:
+      'Set a custom field value on a task only if the task does not already have a value for it. Accepts field_id (UUID) or field_name.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        field_id: { type: 'string', description: 'Custom field ID (UUID) or field name' },
+        task_id: { type: 'string', description: 'Task ID or custom task ID' },
+        value: { type: 'string', description: 'Field value' },
+      },
+      required: ['field_id', 'task_id', 'value'],
+    },
+    _group: 'field',
+  },
 
   {
     name: 'clickup_time_list',

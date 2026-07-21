@@ -32,6 +32,45 @@ function customQuery(ctx: Context, task: ResolvedTask): string {
 
 const FIELD_FIELDS = ['id', 'name', 'type', 'required'];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isFieldId(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+export function resolveFieldId(fields: unknown[], fieldIdOrName: string): string | undefined {
+  if (isFieldId(fieldIdOrName)) {
+    return fieldIdOrName;
+  }
+  if (Array.isArray(fields)) {
+    for (const f of fields) {
+      if (
+        f !== null &&
+        typeof f === 'object' &&
+        (f as Record<string, unknown>).name === fieldIdOrName
+      ) {
+        return String((f as Record<string, unknown>).id);
+      }
+    }
+  }
+  return undefined;
+}
+
+export function taskHasFieldValue(task: unknown, fieldId: string): boolean {
+  if (task === null || typeof task !== 'object') return false;
+  const customFields = (task as Record<string, unknown>).custom_fields;
+  if (!Array.isArray(customFields)) return false;
+  for (const cf of customFields) {
+    if (cf !== null && typeof cf === 'object') {
+      const obj = cf as Record<string, unknown>;
+      if (obj.id === fieldId && obj.value !== null && obj.value !== undefined) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function registerField(program: Command): void {
   const field = program.command('field').description('Manage custom fields');
 
@@ -122,6 +161,66 @@ export function registerField(program: Command): void {
         );
         ctx.ui.stopSpinner();
         ctx.output.printMessage(`Field ${fieldId} removed from task ${resolved.raw}`);
+      }
+    );
+
+  field
+    .command('ensure')
+    .description(
+      'Set a custom field value on a task only if the task does not already have a value for it (auto-detects task from branch; field can be ID or name)'
+    )
+    .argument('<field>', 'Custom field ID or name')
+    .argument('[taskId]', 'Task ID')
+    .requiredOption('--value <value>', 'Field value')
+    .action(
+      async (
+        fieldIdOrName: string,
+        taskId: string | undefined,
+        opts: { value: string },
+        cmd: Command
+      ) => {
+        const ctx = buildContext(cmd);
+        const resolved = requireTask(taskId, true, taskOpts(ctx));
+
+        ctx.ui.startSpinner('Fetching task...');
+        const task = await ctx.client.get(`/v2/task/${resolved.id}${customQuery(ctx, resolved)}`);
+        ctx.ui.stopSpinner();
+
+        let fieldId: string;
+        if (isFieldId(fieldIdOrName)) {
+          fieldId = fieldIdOrName;
+        } else {
+          const listId = task?.list?.id;
+          if (!listId) {
+            throw CliError.client(
+              'Could not determine task list for field name lookup. Pass a field ID instead.'
+            );
+          }
+          ctx.ui.startSpinner('Looking up field...');
+          const fieldsResp = await ctx.client.get(`/v2/list/${listId}/field`);
+          ctx.ui.stopSpinner();
+          const fields = Array.isArray(fieldsResp?.fields) ? fieldsResp.fields : [];
+          const resolvedId = resolveFieldId(fields, fieldIdOrName);
+          if (!resolvedId) {
+            throw CliError.client(`Custom field '${fieldIdOrName}' not found in list ${listId}.`);
+          }
+          fieldId = resolvedId;
+        }
+
+        if (taskHasFieldValue(task, fieldId)) {
+          ctx.output.printMessage(
+            `Field ${fieldIdOrName} already has a value on task ${resolved.raw}; skipping.`
+          );
+          return;
+        }
+
+        ctx.ui.startSpinner('Setting field...');
+        await ctx.client.post(
+          `/v2/task/${resolved.id}/field/${fieldId}${customQuery(ctx, resolved)}`,
+          { value: opts.value }
+        );
+        ctx.ui.stopSpinner();
+        ctx.output.printMessage(`Field ${fieldIdOrName} set on task ${resolved.raw}`);
       }
     );
 }

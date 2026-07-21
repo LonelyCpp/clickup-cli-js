@@ -1,4 +1,5 @@
 import type { ClickUpClient } from '../client.js';
+import { isFieldId, resolveFieldId, taskHasFieldValue } from '../commands/field.js';
 import { parseTaskId } from '../git.js';
 import { compactItems } from '../output.js';
 import { extractArray, walkPage, walkStartId } from '../pagination.js';
@@ -646,6 +647,42 @@ export async function dispatchTool(
       const taskId = requireStr(args, 'task_id');
       await client.delete(`/v2/task/${taskId}/field/${fieldId}${customQuery(taskId, workspaceId)}`);
       return { message: `Field ${fieldId} removed from task ${taskId}` };
+    }
+    case 'clickup_field_ensure': {
+      const fieldIdOrName = requireStr(args, 'field_id');
+      const taskId = requireStr(args, 'task_id');
+      const value = requireStr(args, 'value');
+      const query = customQuery(taskId, workspaceId);
+
+      const task = await client.get(`/v2/task/${taskId}${query}`);
+
+      let fieldId: string;
+      if (isFieldId(fieldIdOrName)) {
+        fieldId = fieldIdOrName;
+      } else {
+        const listId = task?.list?.id;
+        if (!listId) {
+          throw new Error(
+            'Could not determine task list for field name lookup. Pass a field ID instead.'
+          );
+        }
+        const fieldsResp = await client.get(`/v2/list/${listId}/field`);
+        const fields = Array.isArray(fieldsResp?.fields) ? fieldsResp.fields : [];
+        const resolvedId = resolveFieldId(fields, fieldIdOrName);
+        if (!resolvedId) {
+          throw new Error(`Custom field '${fieldIdOrName}' not found in list ${listId}.`);
+        }
+        fieldId = resolvedId;
+      }
+
+      if (taskHasFieldValue(task, fieldId)) {
+        return {
+          message: `Field ${fieldIdOrName} already has a value on task ${taskId}; skipping.`,
+        };
+      }
+
+      await client.post(`/v2/task/${taskId}/field/${fieldId}${query}`, { value });
+      return { message: `Field ${fieldIdOrName} set on task ${taskId}` };
     }
 
     case 'clickup_time_list': {

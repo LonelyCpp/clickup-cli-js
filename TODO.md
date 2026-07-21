@@ -46,7 +46,7 @@ Status legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 - [x] **2.1** `commands/comment.ts` — `list` (start-id pagination), `create`, `update`, `delete`, `replies`, `reply`
 - [x] **2.2** `commands/tag.ts` — `list`, `create` (tag_fg/tag_bg), `update` (fg_color/bg_color), `delete` (destructive-confirm)
-- [x] **2.3** `commands/field.ts` — `list`, `set`, `unset`
+- [x] **2.3** `commands/field.ts` — `list`, `set`, `unset`, `ensure`
 - [x] **2.4** `commands/time.ts` — `list`, `get`, `current` (negative-duration=running), `create`, `update`, `delete`, `start`, `stop`, `tags`, `add-tags`, `remove-tags`, `rename-tag`, `history`
 - [x] **2.5** `commands/view.ts` — `list`, `get`, `create`, `update`, `delete`, `tasks` (page pagination)
 - [x] **2.6** `commands/member.ts` — `list`; `commands/user.ts` — `invite`, `get`, `update`, `remove`
@@ -56,7 +56,7 @@ Status legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ## Phase 3 — MCP server
 
 - [x] **3.1** `mcp/server.ts` — stdio JSON-RPC server via `@modelcontextprotocol/sdk`; `mcp serve` subcommand
-- [x] **3.2** `mcp/tools.ts` — input-schema definitions for every implemented action (60 tools across 13 groups)
+- [x] **3.2** `mcp/tools.ts` — input-schema definitions for every implemented action (61 tools across 13 groups)
 - [x] **3.3** `mcp/dispatch.ts` — calls the same ClickUp API endpoints; returns type-preserving compact JSON (Tier A-1)
 - [x] **3.4** `mcp/filter.ts` — `--profile {all|read|safe}`, `--read-only`, `--groups`, `--exclude-groups`, `--tools`, `--exclude-tools` + `CLICKUP_MCP_*` env equivalents; hide from `tools/list` + reject at `tools/call`
 - [x] **3.5** `mcp-filter.test.ts` (11 tests)
